@@ -3,12 +3,14 @@ package com.example.firsttry;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 
 import android.content.pm.PackageManager;
 import android.location.Address;
 import android.location.Geocoder;
 import android.location.Location;
 import android.os.Build;
+import android.util.Log;
 import android.widget.CompoundButton;
 import android.os.Bundle;
 import android.view.View;
@@ -26,13 +28,23 @@ import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.tasks.OnSuccessListener;
 
 import java.io.IOException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.concurrent.Executor;
 
+// android firebase
+import com.google.firebase.database.DatabaseReference;
+import com.google.firebase.database.FirebaseDatabase;
+
+
+import java.util.Map;
 public class MainActivity extends AppCompatActivity {
-    private static final int DEFAULT_UPDATE_INTERVAL = 30;
-    private static final int FAST_UPDATE_INTERVAL = 5;
+    private static final int DEFAULT_UPDATE_INTERVAL = 5;
+    private static final int FAST_UPDATE_INTERVAL = 1;
     private static final int PERMISSION_FINE_LOCATION = 99;
     private static final int PERMISSION_COARSE_LOCATION = 99;
     TextView tv_lat, tv_lon, tv_altitude, tv_accuracy, tv_speed, tv_Sensor, tv_address, tv_updates;
@@ -47,6 +59,8 @@ public class MainActivity extends AppCompatActivity {
     LocationCallback locationCallBack;
 
     //location request is a config file for all setting related to
+    // Declare DatabaseReference
+    private DatabaseReference mDatabase;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -62,7 +76,8 @@ public class MainActivity extends AppCompatActivity {
         sw_gps = findViewById(R.id.sw_gps);
         sw_locationsupdates = findViewById(R.id.sw_locationsupdates); // Replace 'R.id.sw_locationsupdates' with your actual ID
 
-
+        //firebase ..................
+        mDatabase = FirebaseDatabase.getInstance().getReference();
 
         // set all the properties of  Location request
 
@@ -143,43 +158,50 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @Override
-    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults)
-    {
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-
-        switch (requestCode) {
-            case PERMISSION_FINE_LOCATION:
-                if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                    updateGps();
-                }
-                else {
-                    Toast.makeText(this, "This app requires Permission to be granted in order to work properly", Toast.LENGTH_SHORT).show();
-                }
-
+        if (requestCode == PERMISSION_FINE_LOCATION) {
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                // Permission was granted.
+                startLocationUpdates();
+            } else {
+                // Permission denied.
+                Toast.makeText(this, "Location permissions are required for this app to work", Toast.LENGTH_SHORT).show();
+            }
         }
+        // Repeat for PERMISSION_COARSE_LOCATION if you have separate request codes
     }
+
 
     private void updateGps() {
         fusedLocationProviderClient = LocationServices.getFusedLocationProviderClient(MainActivity.this);
 
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED)
-        {
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
             // Permission is already granted, perform location-related tasks
-            // For example, request location updates
             fusedLocationProviderClient.getLastLocation().addOnSuccessListener(this, new OnSuccessListener<Location>() {
                 @Override
                 public void onSuccess(Location location) {
-                    //we got permission
-                    updateUIValues(location);
+                    // We got permission. Check if location is not null before updating UI
+                    if (location != null) {
+                        updateUIValues(location);
+                    } else {
+                        // Handle case where location is null
+                        tv_address.setText("Location not available");
+                    }
 
                 }
             });
         } else {
+            // Request permissions if not already granted
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, PERMISSION_FINE_LOCATION);
-                requestPermissions(new String[]{Manifest.permission.ACCESS_COARSE_LOCATION}, PERMISSION_COARSE_LOCATION);
-
+                if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                    ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, PERMISSION_FINE_LOCATION);
+                }
+                if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                    ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.ACCESS_COARSE_LOCATION}, PERMISSION_COARSE_LOCATION);
+                }
             }
+
         }
     }
 
@@ -200,12 +222,44 @@ public class MainActivity extends AppCompatActivity {
         } else {
             tv_speed.setText("Not available");
         }
-        Geocoder geocoder  = new Geocoder(MainActivity.this);
+
+        String pattern = "yyyy-MM-dd HH:mm:ss";
+        SimpleDateFormat simpleDateFormat = new SimpleDateFormat(pattern, Locale.getDefault());
+        String date = simpleDateFormat.format(new Date());
+
+        // Get the address using the Geocoder
+        String address = "Not available";
+        Geocoder geocoder = new Geocoder(MainActivity.this);
         try {
-            List<Address> addresses=geocoder.getFromLocation(location.getLatitude(),location.getLongitude(),1);
-            tv_address.setText(addresses.get(0).getAddressLine(0));
+            List<Address> addresses = geocoder.getFromLocation(location.getLatitude(), location.getLongitude(), 1);
+            if (addresses != null && addresses.size() > 0) {
+                address = addresses.get(0).getAddressLine(0);
+            }
         } catch (IOException e) {
-            tv_address.setText("unable to get your address");
+            Log.e("Geocoder", "Failed to get address", e);
         }
+        tv_address.setText(address);
+
+        // Create a HashMap or a Model class to represent your location object
+        Map<String, Object> locationUpdate = new HashMap<>();
+        locationUpdate.put("latitude", location.getLatitude());
+        locationUpdate.put("longitude", location.getLongitude());
+        locationUpdate.put("accuracy", location.getAccuracy());
+        locationUpdate.put("altitude", location.hasAltitude() ? location.getAltitude() : "Not available");
+        locationUpdate.put("speed", location.hasSpeed() ? location.getSpeed() : "Not available");
+        locationUpdate.put("timestamp", date);  // Add the current date and time
+        locationUpdate.put("address", address);  // Add the address
+
+        // Update the values in Firebase
+        mDatabase.child("locations").push().setValue(locationUpdate)
+                .addOnSuccessListener(aVoid -> Log.d("Firebase", "Location updated successfully."))
+                .addOnFailureListener(e -> {
+                    // This will log the error message if the database write fails
+                    Log.d("Firebase", "Failed to update location.", e);
+                    // Consider showing a message to the user as well
+                    Toast.makeText(MainActivity.this, "Failed to update location: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                });
+
     }
+
 }

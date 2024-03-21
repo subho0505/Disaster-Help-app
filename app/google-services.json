@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "197363771015",
+    "project_id": "firsttry-54120",
+    "storage_bucket": "firsttry-54120.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:197363771015:android:1e2eaff526e3169c517a22",
+        "android_client_info": {
+          "package_name": "com.example.firsttry"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAUb0d6j5NMgVV6RY4GFjObKuY6-qD9afw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
